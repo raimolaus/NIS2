@@ -1,0 +1,306 @@
+// Prisma schema for NIS2 Abimees MVP
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+// ============================================
+// KASUTAJA (NextAuth compatible)
+// ============================================
+model User {
+  id            String    @id @default(cuid())
+  email         String    @unique
+  emailVerified DateTime?
+  passwordHash  String?
+  name          String?
+  image         String?
+
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  // NextAuth relations
+  accounts      Account[]
+  sessions      Session[]
+
+  // App relations
+  organization  Organization?
+  conversations Conversation[]
+  actionItems   ActionItem[]
+}
+
+// NextAuth Account model
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+// NextAuth Session model
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+// NextAuth VerificationToken model
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+// ============================================
+// ORGANISATSIOON
+// ============================================
+model Organization {
+  id            String   @id @default(cuid())
+  name          String
+
+  // Rekvisiidid
+  registrationCode      String?  // Registrikood
+  address               String?  // Tänavaaadress
+  city                  String?  // Linn
+  postalCode            String?  // Postiindeks
+  contactPhone          String?  // Ettevõtte telefon
+  contactEmail          String?  // Ettevõtte email
+
+  // Vastutavad isikud
+  ceoName               String?  // Juhataja/direktor nimi
+  ceoEmail              String?  // Juhataja email
+  ceoPhone              String?  // Juhataja telefon
+
+  securityOfficerName   String?  // Infoturbe vastutaja nimi
+  securityOfficerEmail  String?  // Infoturbe vastutaja email
+  securityOfficerPhone  String?  // Infoturbe vastutaja telefon
+
+  dataProtectionOfficerName  String?  // Andmekaitse vastutaja (GDPR)
+  dataProtectionOfficerEmail String?
+  dataProtectionOfficerPhone String?
+
+  // Profiil
+  sector                String   // "healthcare", "energy", "transport", "government", etc.
+  subsector             String?  // "general_practitioner", "pharmacy", etc.
+  employeeCount         String   // "1-10", "11-50", etc.
+  revenue               String   // "<10M", ">10M"
+  itSystems             String[] // ["email", "erp", "patient_db"]
+  securityProcedures    String?  // "documented_approved", "documented_not_approved", "not_documented", "unknown"
+  hasSecurityOfficer    String?  // "yes_dedicated", "yes_part_time", "no", "unknown"
+  processesPersonalData String?  // "yes_extensive", "yes_limited", "no", "unknown"
+  profileConfirmed      Boolean  @default(false) // User has confirmed the profile
+
+  // NIS2
+  nis2Applicable Boolean  @default(false)
+  nis2Category   String?  // "essential", "important"
+
+  // Subscription
+  plan          String   @default("free") // "free", "starter", "professional"
+  stripeCustomerId String?
+  stripeSubscriptionId String?
+  trialEndsAt   DateTime?
+  subscriptionStatus String? // "active", "canceled", "past_due"
+
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  userId        String   @unique
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  assessments   Assessment[]
+  documents     Document[]
+  actionPlan    ActionItem[]
+  risks         Risk[]
+}
+
+// ============================================
+// ENESEHINDAMINE
+// ============================================
+model Assessment {
+  id              String   @id @default(cuid())
+
+  // Status
+  status          String   @default("in_progress") // "in_progress", "completed"
+  progress        Int      @default(0) // 0-40 (number of answered questions)
+  score           Int?     // 0-100 (final score)
+
+  // Vastused (JSON)
+  answers         Json     @default("{}")
+  // { "q1": "option_a", "q2": "option_c", ... }
+
+  // Tulemused
+  strengths       String[] @default([])
+  weaknesses      String[] @default([])
+  recommendations Json?    // AI generated recommendations
+
+  completedAt     DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  organizationId  String
+  organization    Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  report          Document? @relation("AssessmentReport")
+}
+
+// ============================================
+// DOKUMENDID
+// ============================================
+model Document {
+  id              String   @id @default(cuid())
+
+  title           String
+  type            String   // "policy", "risk_assessment", "action_plan"
+  version         String   @default("1.0")
+  status          String   @default("draft") // "draft", "approved", "archived"
+
+  // Sisu
+  content         String   @db.Text // Markdown or HTML
+  contentJson     Json?    // Structured content
+
+  // Files
+  fileUrl         String?  // URL to PDF/DOCX in storage
+
+  approvedAt      DateTime?
+  approvedBy      String?  // User ID or name
+
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  organizationId  String
+  organization    Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  assessmentId    String?  @unique
+  assessment      Assessment? @relation("AssessmentReport", fields: [assessmentId], references: [id])
+}
+
+// ============================================
+// TEGEVUSPLAAN
+// ============================================
+model ActionItem {
+  id              String   @id @default(cuid())
+
+  title           String
+  description     String   @db.Text
+
+  priority        String   // "high", "medium", "low"
+  status          String   @default("pending") // "pending", "in_progress", "completed"
+
+  dueDate         DateTime?
+  assignee        String?  // kasutaja nimi või ID
+
+  // NIS2 viide
+  nis2Reference   String?  // "Article 21, Section 2"
+
+  // Juhised
+  instructions    String?  @db.Text
+  resourceLinks   String[] @default([])
+
+  // Tõendid
+  evidenceUrl     String?
+  notes           String?  @db.Text
+
+  completedAt     DateTime?
+
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  organizationId  String
+  organization    Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  completedBy     String?
+  completedByUser User?    @relation(fields: [completedBy], references: [id])
+}
+
+// ============================================
+// RISKIHALDUS
+// ============================================
+model Risk {
+  id              String   @id @default(cuid())
+
+  // Riski põhiandmed
+  riskId          String   // "RISK-01", "RISK-02", etc.
+  title           String   // Riski nimetus
+  description     String   @db.Text // Detailne kirjeldus
+  category        String   // "technical", "organizational", "compliance"
+
+  // Hindamine
+  likelihood      Int      // 1-5 (tõenäosus)
+  impact          Int      // 1-5 (mõju)
+  riskLevel       Int      // arvutatud: likelihood * impact
+
+  // Meetmed
+  currentMeasures String?  @db.Text // Praegused turvameetmed
+  recommendations String?  @db.Text // Soovitused
+
+  // Haldus
+  owner           String?  // Vastutaja (CISO, IT juht, jne)
+  status          String   @default("identified") // "identified", "in_progress", "mitigated", "accepted"
+
+  // Tähtajad
+  dueDate         DateTime?
+  mitigatedAt     DateTime?
+
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  organizationId  String
+  organization    Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId])
+}
+
+// ============================================
+// AI VESTLUSED
+// ============================================
+model Conversation {
+  id              String   @id @default(cuid())
+
+  title           String   @default("Uus vestlus")
+
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  userId          String
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  messages        Message[]
+}
+
+model Message {
+  id              String   @id @default(cuid())
+
+  role            String   // "user", "assistant"
+  content         String   @db.Text
+
+  // Metadata
+  tokens          Int?     // token count (for billing)
+  model           String?  // "claude-3-5-sonnet-20241022"
+
+  createdAt       DateTime @default(now())
+
+  conversationId  String
+  conversation    Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  @@index([conversationId])
+}

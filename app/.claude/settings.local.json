@@ -1,0 +1,21 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(ls:*)",
+      "Bash(node -e:*)",
+      "Bash(node -c:*)",
+      "Bash(for f in crisis-app.js plans-app.js crisis-data.js)",
+      "Bash(do node -c $f)",
+      "Bash(echo:*)",
+      "Bash(done)",
+      "WebSearch",
+      "Bash(python3:*)",
+      "Bash(unzip:*)",
+      "Bash(for file in crisis-data.js app-new.js crisis-app.js plans-app.js)",
+      "Bash(do echo \"=== Checking $file ===\")",
+      "Bash(node -pe:*)",
+      "Bash(npm run db:push:*)",
+      "Bash(npm run dev:*)"
+    ]
+  }
+}
