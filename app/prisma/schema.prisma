@@ -250,8 +250,10 @@ model Risk {
   riskLevel       Int      // arvutatud: likelihood * impact
 
   // Meetmed
-  currentMeasures String?  @db.Text // Praegused turvameetmed
-  recommendations String?  @db.Text // Soovitused
+  currentMeasures   String?  @db.Text // Praegused turvameetmed
+  recommendations   String?  @db.Text // Soovitused
+  mitigationActions String?  @db.Text // Maandamismeetmed (konkreetsed tegevused)
+  completedActions  String?  @db.Text // Tehtud tegevused (pärast maandamist)
 
   // Haldus
   owner           String?  // Vastutaja (CISO, IT juht, jne)

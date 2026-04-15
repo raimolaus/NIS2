@@ -2,43 +2,189 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { useForm, FormProvider } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
+import * as z from 'zod';
 import Link from 'next/link';
 
-interface FormData {
-  sector: string;
-  subsector: string;
-  employeeCount: string;
-  revenue: string;
-  itSystems: string[];
-  securityProcedures: string;
-  hasSecurityOfficer: string;
-  processesPersonalData: string;
-}
+import {
+  Button,
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+  Input,
+  Label,
+  Badge,
+  Progress,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormControl,
+  FormDescription,
+  FormMessage,
+  Separator,
+} from '@/components/ui';
+
+// Zod validation schema
+const organizationSchema = z.object({
+  name: z.string().min(2, 'Nimi peab olema vähemalt 2 tähemärki'),
+  registrationCode: z.string().min(5, 'Sisestage registrikood'),
+  sector: z.string().min(1, 'Valige sektor'),
+  subsector: z.string().optional(),
+  employeeCount: z.string().min(1, 'Valige töötajate arv'),
+  revenue: z.string().min(1, 'Valige käive'),
+
+  // Contact info
+  contactEmail: z.string().email('Vigane e-posti aadress'),
+  contactPhone: z.string().min(6, 'Sisestage telefon'),
+  address: z.string().optional(),
+  city: z.string().optional(),
+  postalCode: z.string().optional(),
+
+  // Responsible persons
+  ceoName: z.string().min(2, 'Sisestage juhataja nimi'),
+  ceoEmail: z.string().email('Vigane e-posti aadress'),
+
+  securityOfficerName: z.string().optional(),
+  securityOfficerEmail: z.string().email('Vigane e-posti aadress').optional().or(z.literal('')),
+});
+
+type OrganizationFormData = z.infer<typeof organizationSchema>;
 
 export default function OnboardingPage() {
   const router = useRouter();
   const [currentStep, setCurrentStep] = useState(1);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [nis2Result, setNis2Result] = useState<{
+    applicable: boolean;
+    category?: 'essential' | 'important';
+    reason?: string;
+  } | null>(null);
 
-  const [formData, setFormData] = useState<FormData>({
-    sector: '',
-    subsector: '',
-    employeeCount: '',
-    revenue: '',
-    itSystems: [],
-    securityProcedures: '',
-    hasSecurityOfficer: '',
-    processesPersonalData: '',
+  const form = useForm<OrganizationFormData>({
+    resolver: zodResolver(organizationSchema),
+    defaultValues: {
+      name: '',
+      registrationCode: '',
+      sector: '',
+      subsector: '',
+      employeeCount: '',
+      revenue: '',
+      contactEmail: '',
+      contactPhone: '',
+      address: '',
+      city: '',
+      postalCode: '',
+      ceoName: '',
+      ceoEmail: '',
+      securityOfficerName: '',
+      securityOfficerEmail: '',
+    },
   });
 
-  const totalSteps = 8;
+  const totalSteps = 3;
+  const progressPercentage = (currentStep / totalSteps) * 100;
 
-  const handleNext = () => {
-    if (currentStep < totalSteps) {
-      setCurrentStep(currentStep + 1);
-    } else {
-      handleSubmit();
+  const sectors = [
+    { value: 'healthcare', label: 'Tervishoid' },
+    { value: 'energy', label: 'Energeetika' },
+    { value: 'transport', label: 'Transport' },
+    { value: 'government', label: 'Avalik sektor' },
+    { value: 'finance', label: 'Finantsteenused' },
+    { value: 'it_services', label: 'IT teenused' },
+    { value: 'manufacturing', label: 'Tootmine' },
+    { value: 'logistics', label: 'Logistika' },
+    { value: 'water', label: 'Veevarustus' },
+    { value: 'digital_infrastructure', label: 'Digitaalne infrastruktuur' },
+    { value: 'other', label: 'Muu' },
+  ];
+
+  const employeeCounts = [
+    { value: '1-10', label: '1-10 töötajat' },
+    { value: '11-50', label: '11-50 töötajat' },
+    { value: '51-250', label: '51-250 töötajat' },
+    { value: '251+', label: '251+ töötajat' },
+  ];
+
+  const revenues = [
+    { value: '<€1M', label: 'Alla 1 miljon €' },
+    { value: '€1-10M', label: '1-10 miljonit €' },
+    { value: '€10-50M', label: '10-50 miljonit €' },
+    { value: '>€50M', label: 'Üle 50 miljoni €' },
+  ];
+
+  const checkNIS2Applicability = (data: OrganizationFormData) => {
+    // Simple logic for NIS2 applicability
+    const isMediumOrLarge = ['11-50', '51-250', '251+'].includes(data.employeeCount);
+    const hasRevenue = ['€1-10M', '€10-50M', '>€50M'].includes(data.revenue);
+    const isCriticalSector = ['healthcare', 'energy', 'transport', 'finance', 'digital_infrastructure'].includes(data.sector);
+
+    if (isMediumOrLarge && hasRevenue && isCriticalSector) {
+      return {
+        applicable: true,
+        category: data.employeeCount === '251+' || data.revenue === '>€50M'
+          ? 'essential' as const
+          : 'important' as const,
+        reason: 'Teie organisatsioon vastab NIS2 direktiivi suuruse ja sektori kriteeriumidele.',
+      };
+    }
+
+    return {
+      applicable: false,
+      reason: 'Teie organisatsioon ei vasta NIS2 direktiivi kohaldamise kriteeriumidele (suurus või sektor).',
+    };
+  };
+
+  const handleNextStep = async () => {
+    setError('');
+
+    if (currentStep === 1) {
+      // Validate step 1 fields
+      const step1Fields = ['name', 'registrationCode', 'sector', 'employeeCount', 'revenue'] as const;
+      const result = await form.trigger(step1Fields);
+      if (result) {
+        setCurrentStep(2);
+      }
+    } else if (currentStep === 2) {
+      // Validate step 2 fields
+      const step2Fields = ['contactEmail', 'contactPhone', 'ceoName', 'ceoEmail'] as const;
+      const result = await form.trigger(step2Fields);
+      if (result) {
+        // Check NIS2 applicability
+        const formData = form.getValues();
+        const result = checkNIS2Applicability(formData);
+        setNis2Result(result);
+        setCurrentStep(3);
+      }
+    } else if (currentStep === 3) {
+      // Submit
+      await handleSubmit(form.getValues());
+    }
+  };
+
+  const handleSubmit = async (data: OrganizationFormData) => {
+    setLoading(true);
+    setError('');
+
+    try {
+      // Mock API call for now
+      await new Promise(resolve => setTimeout(resolve, 1000));
+
+      // In real app, this would call /api/organization
+      // const res = await fetch('/api/organization', {
+      //   method: 'POST',
+      //   headers: { 'Content-Type': 'application/json' },
+      //   body: JSON.stringify(data),
+      // });
+
+      // Success - redirect to dashboard
+      router.push('/dashboard?onboarded=true');
+    } catch (err) {
+      setError('Midagi läks valesti. Palun proovige uuesti.');
+      setLoading(false);
     }
   };
 
@@ -48,76 +194,14 @@ export default function OnboardingPage() {
     }
   };
 
-  const handleSubmit = async (dataToSubmit?: FormData) => {
-    setError('');
-    setLoading(true);
-
-    const submitData = dataToSubmit || formData;
-
-    try {
-      const res = await fetch('/api/organization', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(submitData),
-      });
-
-      const data = await res.json();
-
-      if (!res.ok) {
-        setError(data.error || 'Midagi läks valesti');
-        setLoading(false);
-        return;
-      }
-
-      // Success - redirect to dashboard
-      router.push('/dashboard?onboarded=true');
-    } catch (err) {
-      setError('Midagi läks valesti');
-      setLoading(false);
-    }
-  };
-
-  const isStepValid = () => {
-    switch (currentStep) {
-      case 1:
-        return formData.sector !== '';
-      case 2:
-        // Subsector optional for some sectors
-        return true;
-      case 3:
-        return formData.employeeCount !== '';
-      case 4:
-        return formData.revenue !== '';
-      case 5:
-        return formData.itSystems.length > 0;
-      case 6:
-        return formData.securityProcedures !== '';
-      case 7:
-        return formData.hasSecurityOfficer !== '';
-      case 8:
-        return formData.processesPersonalData !== '';
-      default:
-        return false;
-    }
-  };
-
-  const handleITSystemToggle = (system: string) => {
-    setFormData((prev) => ({
-      ...prev,
-      itSystems: prev.itSystems.includes(system)
-        ? prev.itSystems.filter((s) => s !== system)
-        : [...prev.itSystems, system],
-    }));
-  };
-
   return (
-    <div className="min-h-screen bg-gradient-to-b from-white to-blue-50">
+    <div className="min-h-screen bg-background">
       {/* Header */}
-      <header className="bg-white border-b">
+      <header className="border-b bg-card">
         <div className="max-w-7xl mx-auto px-4 py-4">
           <Link href="/" className="inline-flex items-center gap-2 hover:opacity-80">
-            <div className="h-8 w-8 rounded-lg bg-primary-600 flex items-center justify-center">
-              <span className="text-white font-bold text-lg">N2</span>
+            <div className="h-8 w-8 rounded-lg bg-primary flex items-center justify-center">
+              <span className="text-primary-foreground font-bold text-lg">N2</span>
             </div>
             <span className="font-bold text-xl">NIS2 Abimees</span>
           </Link>
@@ -127,434 +211,337 @@ export default function OnboardingPage() {
       {/* Content */}
       <div className="flex items-center justify-center px-4 py-12">
         <div className="w-full max-w-2xl">
-        {/* Progress */}
-        <div className="mb-8">
-          <div className="flex justify-between items-center mb-2">
-            <span className="text-sm font-medium text-gray-700">
-              Samm {currentStep} / {totalSteps}
-            </span>
-            <span className="text-sm text-gray-500">~5 minutit</span>
+          {/* Progress */}
+          <div className="mb-8">
+            <div className="flex justify-between items-center mb-2">
+              <span className="text-sm font-medium">Samm {currentStep} / {totalSteps}</span>
+              <span className="text-sm text-muted-foreground">~5 minutit</span>
+            </div>
+            <Progress value={progressPercentage} />
           </div>
-          <div className="w-full bg-gray-200 rounded-full h-2">
-            <div
-              className="bg-primary-600 h-2 rounded-full transition-all duration-300"
-              style={{ width: `${(currentStep / totalSteps) * 100}%` }}
-            />
-          </div>
-        </div>
 
-        {/* Card */}
-        <div className="bg-white rounded-lg shadow-lg p-8">
+          {/* Error Message */}
           {error && (
-            <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded mb-6">
-              {error}
-            </div>
+            <Card className="mb-6 border-destructive bg-destructive/10">
+              <CardContent className="pt-6">
+                <p className="text-destructive font-medium">{error}</p>
+              </CardContent>
+            </Card>
           )}
 
-          {/* Step 1: Sector */}
-          {currentStep === 1 && (
-            <div>
-              <div className="mb-4">
-                <span className="inline-block px-3 py-1 bg-primary-100 text-primary-700 rounded-full text-sm font-semibold">
-                  Organisatsiooni profiil
-                </span>
-              </div>
-              <h2 className="text-2xl font-bold mb-2">Mis sektoris te tegutsete?</h2>
-              <p className="text-gray-600 mb-6">
-                Valige peamine tegevusvaldkond, mis kirjeldab teie organisatsiooni.
-              </p>
-
-              <div className="space-y-3">
-                {[
-                  { value: 'healthcare', label: 'Tervishoid' },
-                  { value: 'energy', label: 'Energeetika' },
-                  { value: 'transport', label: 'Transport' },
-                  { value: 'government', label: 'Avalik sektor / Valitsusasutus' },
-                  { value: 'finance', label: 'Finantsteenused' },
-                  { value: 'it_services', label: 'IT teenused' },
-                  { value: 'manufacturing', label: 'Tootmine' },
-                  { value: 'logistics', label: 'Logistika / Laondus' },
-                  { value: 'water', label: 'Veevarustus ja kanalisatsioon' },
-                  { value: 'digital_infrastructure', label: 'Digitaalne infrastruktuur' },
-                  { value: 'other', label: 'Muu' },
-                ].map((option) => (
-                  <button
-                    key={option.value}
-                    type="button"
-                    onClick={() => {
-                      setFormData({ ...formData, sector: option.value, subsector: '' });
-                      setTimeout(() => {
-                        if (currentStep < totalSteps) setCurrentStep(currentStep + 1);
-                      }, 300);
-                    }}
-                    className={`w-full flex items-center p-4 border-2 rounded-lg cursor-pointer transition text-left ${
-                      formData.sector === option.value
-                        ? 'border-primary-600 bg-primary-50'
-                        : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'
-                    }`}
-                  >
-                    <span className="font-medium text-gray-900">{option.label}</span>
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* Step 2: Subsector (conditional) */}
-          {currentStep === 2 && (
-            <div>
-              <div className="mb-4">
-                <span className="inline-block px-3 py-1 bg-primary-100 text-primary-700 rounded-full text-sm font-semibold">
-                  Organisatsiooni profiil
-                </span>
-              </div>
-              <h2 className="text-2xl font-bold mb-2">Täpsustage oma tegevusala</h2>
-              <p className="text-gray-600 mb-6">
-                {formData.sector === 'healthcare' && 'Milline tervishoid teenus te olete?'}
-                {formData.sector === 'other' && 'Kirjeldage lühidalt oma tegevusala'}
-                {!['healthcare', 'other'].includes(formData.sector) &&
-                  'See samm on valikuline, võite jätkata edasi'}
-              </p>
-
-              {formData.sector === 'healthcare' && (
-                <div className="space-y-3">
-                  {[
-                    { value: 'general_practitioner', label: 'Perearst' },
-                    { value: 'pharmacy', label: 'Apteek' },
-                    { value: 'clinic', label: 'Erakliinik' },
-                    { value: 'hospital', label: 'Haigla' },
-                    { value: 'other', label: 'Muu' },
-                  ].map((option) => (
-                    <button
-                      key={option.value}
-                      type="button"
-                      onClick={() => {
-                        setFormData({ ...formData, subsector: option.value });
-                        setTimeout(() => {
-                          if (currentStep < totalSteps) setCurrentStep(currentStep + 1);
-                        }, 300);
-                      }}
-                      className={`w-full flex items-center p-4 border-2 rounded-lg cursor-pointer transition text-left ${
-                        formData.subsector === option.value
-                          ? 'border-primary-600 bg-primary-50'
-                          : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'
-                      }`}
-                    >
-                      <span className="font-medium text-gray-900">{option.label}</span>
-                    </button>
-                  ))}
-                </div>
-              )}
-
-              {formData.sector === 'other' && (
-                <input
-                  type="text"
-                  value={formData.subsector || ''}
-                  onChange={(e) => setFormData({ ...formData, subsector: e.target.value })}
-                  placeholder="Näiteks: konsultatsioon, katusekate paigaldus..."
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 outline-none text-gray-900 bg-white"
-                />
-              )}
-
-              {!['healthcare', 'other'].includes(formData.sector) && (
-                <div className="text-center py-8">
-                  <p className="text-gray-500">Pole vaja täpsustada, jätkake edasi</p>
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* Step 3: Employee Count */}
-          {currentStep === 3 && (
-            <div>
-              <div className="mb-4">
-                <span className="inline-block px-3 py-1 bg-primary-100 text-primary-700 rounded-full text-sm font-semibold">
-                  Organisatsiooni suurus
-                </span>
-              </div>
-              <h2 className="text-2xl font-bold mb-2">Mitu töötajat teil on?</h2>
-              <p className="text-gray-600 mb-6">
-                Organisatsiooni suurus on üks NIS2 kohaldatavuse kriteeriumitest.
-              </p>
-
-              <div className="space-y-3">
-                {[
-                  { value: '1-10', label: '1-10 töötajat' },
-                  { value: '11-50', label: '11-50 töötajat' },
-                  { value: '51-250', label: '51-250 töötajat' },
-                  { value: '251+', label: '251+ töötajat' },
-                ].map((option) => (
-                  <button
-                    key={option.value}
-                    type="button"
-                    onClick={() => {
-                      setFormData({ ...formData, employeeCount: option.value });
-                      setTimeout(() => {
-                        if (currentStep < totalSteps) setCurrentStep(currentStep + 1);
-                      }, 300);
-                    }}
-                    className={`w-full flex items-center p-4 border-2 rounded-lg cursor-pointer transition text-left ${
-                      formData.employeeCount === option.value
-                        ? 'border-primary-600 bg-primary-50'
-                        : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'
-                    }`}
-                  >
-                    <span className="font-medium text-gray-900">{option.label}</span>
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* Step 4: Revenue */}
-          {currentStep === 4 && (
-            <div>
-              <div className="mb-4">
-                <span className="inline-block px-3 py-1 bg-primary-100 text-primary-700 rounded-full text-sm font-semibold">
-                  Organisatsiooni suurus
-                </span>
-              </div>
-              <h2 className="text-2xl font-bold mb-2">
-                Kas teie käive on üle 10 miljoni euro aastas?
-              </h2>
-              <p className="text-gray-600 mb-6">
-                Aastakäive on samuti NIS2 kohaldatavuse kriteerium.
-              </p>
-
-              <div className="space-y-3">
-                {[
-                  { value: '>10M', label: 'Jah, üle 10 miljoni euro' },
-                  { value: '<10M', label: 'Ei, alla 10 miljoni euro' },
-                  { value: 'unknown', label: 'Ei tea täpselt' },
-                ].map((option) => (
-                  <button
-                    key={option.value}
-                    type="button"
-                    onClick={() => {
-                      setFormData({ ...formData, revenue: option.value });
-                      setTimeout(() => {
-                        if (currentStep < totalSteps) setCurrentStep(currentStep + 1);
-                      }, 300);
-                    }}
-                    className={`w-full flex items-center p-4 border-2 rounded-lg cursor-pointer transition text-left ${
-                      formData.revenue === option.value
-                        ? 'border-primary-600 bg-primary-50'
-                        : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'
-                    }`}
-                  >
-                    <span className="font-medium text-gray-900">{option.label}</span>
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* Step 5: IT Systems */}
-          {currentStep === 5 && (
-            <div>
-              <div className="mb-4">
-                <span className="inline-block px-3 py-1 bg-green-100 text-green-700 rounded-full text-sm font-semibold">
-                  IT infrastruktuur
-                </span>
-              </div>
-              <h2 className="text-2xl font-bold mb-2">Milliseid IT süsteeme kasutate?</h2>
-              <p className="text-gray-600 mb-6">Valige kõik, mis teie organisatsioonis kasutusel on.</p>
-
-              <div className="space-y-3">
-                {[
-                  { value: 'email', label: 'Email (Google Workspace / Microsoft 365)' },
-                  { value: 'accounting', label: 'Raamatupidamistarkvar' },
-                  { value: 'erp', label: 'ERP süsteem' },
-                  { value: 'crm', label: 'CRM süsteem' },
-                  { value: 'document_management', label: 'Dokumendihaldus' },
-                  { value: 'database', label: 'Andmebaasid (kliendid, patsiendid jne)' },
-                  { value: 'website', label: 'Veebileht / E-pood' },
-                  { value: 'cloud_services', label: 'Pilve teenused (AWS, Azure jne)' },
-                  { value: 'none', label: 'Ei kasuta IT süsteeme' },
-                ].map((option) => (
-                  <label
-                    key={option.value}
-                    className={`flex items-center p-4 border-2 rounded-lg cursor-pointer transition ${
-                      formData.itSystems.includes(option.value)
-                        ? 'border-primary-600 bg-primary-50'
-                        : 'border-gray-200 hover:border-gray-300'
-                    }`}
-                  >
-                    <input
-                      type="checkbox"
-                      checked={formData.itSystems.includes(option.value)}
-                      onChange={() => handleITSystemToggle(option.value)}
-                      className="mr-3 h-4 w-4"
+          {/* Step Content */}
+          <FormProvider {...form}>
+            <form onSubmit={form.handleSubmit(handleSubmit)}>
+              {/* Step 1: Organization Info */}
+              {currentStep === 1 && (
+                <Card>
+                  <CardHeader>
+                    <Badge className="w-fit mb-2">Organisatsiooni info</Badge>
+                    <CardTitle>Rääkige meile oma organisatsioonist</CardTitle>
+                    <CardDescription>
+                      Põhiandmed, mis aitavad meil hinnata NIS2 kohalduvust
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-6">
+                    <FormField
+                      control={form.control}
+                      name="name"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Organisatsiooni nimi *</FormLabel>
+                          <FormControl>
+                            <Input placeholder="Näiteks: OÜ NIS2 Testimine" {...field} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
                     />
-                    <span className="font-medium text-gray-900">{option.label}</span>
-                  </label>
-                ))}
+
+                    <FormField
+                      control={form.control}
+                      name="registrationCode"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Registrikood *</FormLabel>
+                          <FormControl>
+                            <Input placeholder="12345678" {...field} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+
+                    <FormField
+                      control={form.control}
+                      name="sector"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Tegevussektor *</FormLabel>
+                          <FormControl>
+                            <select
+                              {...field}
+                              className="w-full px-3 py-2 border border-input rounded-md bg-background"
+                            >
+                              <option value="">Vali sektor...</option>
+                              {sectors.map(s => (
+                                <option key={s.value} value={s.value}>{s.label}</option>
+                              ))}
+                            </select>
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+
+                    <FormField
+                      control={form.control}
+                      name="employeeCount"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Töötajate arv *</FormLabel>
+                          <FormControl>
+                            <select
+                              {...field}
+                              className="w-full px-3 py-2 border border-input rounded-md bg-background"
+                            >
+                              <option value="">Vali vahemik...</option>
+                              {employeeCounts.map(e => (
+                                <option key={e.value} value={e.value}>{e.label}</option>
+                              ))}
+                            </select>
+                          </FormControl>
+                          <FormDescription>
+                            Organisatsiooni suurus on üks NIS2 kriteeriume
+                          </FormDescription>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+
+                    <FormField
+                      control={form.control}
+                      name="revenue"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Aastakäive *</FormLabel>
+                          <FormControl>
+                            <select
+                              {...field}
+                              className="w-full px-3 py-2 border border-input rounded-md bg-background"
+                            >
+                              <option value="">Vali vahemik...</option>
+                              {revenues.map(r => (
+                                <option key={r.value} value={r.value}>{r.label}</option>
+                              ))}
+                            </select>
+                          </FormControl>
+                          <FormDescription>
+                            Käive on teine NIS2 kohalduvuse kriteerium
+                          </FormDescription>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </CardContent>
+                </Card>
+              )}
+
+              {/* Step 2: Contact & Responsible Persons */}
+              {currentStep === 2 && (
+                <Card>
+                  <CardHeader>
+                    <Badge className="w-fit mb-2" variant="secondary">Kontaktandmed</Badge>
+                    <CardTitle>Kontaktandmed ja vastutajad</CardTitle>
+                    <CardDescription>
+                      Info vajalike isikute ja kontaktide kohta
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-6">
+                    <div className="space-y-4">
+                      <h3 className="font-semibold">Üldised kontaktandmed</h3>
+
+                      <FormField
+                        control={form.control}
+                        name="contactEmail"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>E-post *</FormLabel>
+                            <FormControl>
+                              <Input type="email" placeholder="info@firma.ee" {...field} />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+
+                      <FormField
+                        control={form.control}
+                        name="contactPhone"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Telefon *</FormLabel>
+                            <FormControl>
+                              <Input placeholder="+372 1234 5678" {...field} />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                    </div>
+
+                    <Separator />
+
+                    <div className="space-y-4">
+                      <h3 className="font-semibold">Juhataja (CEO)</h3>
+
+                      <FormField
+                        control={form.control}
+                        name="ceoName"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Nimi *</FormLabel>
+                            <FormControl>
+                              <Input placeholder="Mari Maasikas" {...field} />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+
+                      <FormField
+                        control={form.control}
+                        name="ceoEmail"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>E-post *</FormLabel>
+                            <FormControl>
+                              <Input type="email" placeholder="ceo@firma.ee" {...field} />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                    </div>
+
+                    <Separator />
+
+                    <div className="space-y-4">
+                      <h3 className="font-semibold">Infoturbe vastutaja (valikuline)</h3>
+                      <p className="text-sm text-muted-foreground">
+                        NIS2 nõuab vastutava isiku määramist. Võite selle ka hiljem lisada.
+                      </p>
+
+                      <FormField
+                        control={form.control}
+                        name="securityOfficerName"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Nimi</FormLabel>
+                            <FormControl>
+                              <Input placeholder="Kalle Turvaline" {...field} />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+
+                      <FormField
+                        control={form.control}
+                        name="securityOfficerEmail"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>E-post</FormLabel>
+                            <FormControl>
+                              <Input type="email" placeholder="security@firma.ee" {...field} />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+
+              {/* Step 3: NIS2 Result */}
+              {currentStep === 3 && nis2Result && (
+                <Card>
+                  <CardHeader>
+                    <Badge className="w-fit mb-2" variant={nis2Result.applicable ? "warning" : "secondary"}>
+                      NIS2 Tulemus
+                    </Badge>
+                    <CardTitle>
+                      {nis2Result.applicable ? 'NIS2 kohaldub teie organisatsioonile' : 'NIS2 ei kohaldu'}
+                    </CardTitle>
+                    <CardDescription>{nis2Result.reason}</CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-6">
+                    {nis2Result.applicable ? (
+                      <div className="space-y-4">
+                        <div className="flex items-center gap-2">
+                          <Badge variant="warning">✓ NIS2 kohaldub</Badge>
+                          <Badge variant="secondary">
+                            {nis2Result.category === 'essential' ? 'Oluline üksus' : 'Tähtis üksus'}
+                          </Badge>
+                        </div>
+
+                        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                          <h3 className="font-semibold text-blue-900 mb-2">Mis see tähendab?</h3>
+                          <ul className="text-sm text-blue-700 space-y-2">
+                            <li>• Peate järgima NIS2 direktiivi nõudeid</li>
+                            <li>• Tähtaeg: oktoober 2024</li>
+                            <li>• Meie platvorm aitab teil nõuetele vastata</li>
+                          </ul>
+                        </div>
+
+                        <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+                          <h3 className="font-semibold text-green-900 mb-2">Järgmised sammud:</h3>
+                          <ol className="text-sm text-green-700 space-y-2">
+                            <li>1. Teeme 40-küsimuse enesehindamise</li>
+                            <li>2. Genereerime vajalikud dokumendid</li>
+                            <li>3. Loome tegevuskava lünkade kõrvaldamiseks</li>
+                          </ol>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="space-y-4">
+                        <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
+                          <h3 className="font-semibold mb-2">Mis edasi?</h3>
+                          <p className="text-sm text-muted-foreground mb-3">
+                            Kuigi NIS2 ei kohaldu, soovitame siiski järgida head infoturbe praktikat.
+                            Meie platvorm aitab teil sellega.
+                          </p>
+                          <p className="text-sm text-muted-foreground">
+                            Võite kasutada kõiki meie tööriistu oma infoturbe parendamiseks.
+                          </p>
+                        </div>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              )}
+
+              {/* Navigation */}
+              <div className="flex justify-between mt-6">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={handleBack}
+                  disabled={currentStep === 1 || loading}
+                >
+                  Tagasi
+                </Button>
+
+                <Button
+                  type="button"
+                  onClick={handleNextStep}
+                  disabled={loading}
+                >
+                  {loading ? 'Salvestan...' : currentStep === 3 ? 'Lõpeta' : 'Edasi'}
+                </Button>
               </div>
-            </div>
-          )}
-
-          {/* Step 6: Security Procedures */}
-          {currentStep === 6 && (
-            <div>
-              <div className="mb-4">
-                <span className="inline-block px-3 py-1 bg-orange-100 text-orange-700 rounded-full text-sm font-semibold">
-                  Infoturve praegune seis
-                </span>
-              </div>
-              <h2 className="text-2xl font-bold mb-2">
-                Kas teil on kirjalik infoturbepoliitika?
-              </h2>
-              <p className="text-gray-600 mb-6">
-                Infoturbepoliitika on NIS2 kohustuslik nõue.
-              </p>
-
-              <div className="space-y-3">
-                {[
-                  { value: 'documented_approved', label: 'Jah, kinnitatud juhtkonna poolt' },
-                  {
-                    value: 'documented_not_approved',
-                    label: 'Jah, aga pole veel kinnitatud',
-                  },
-                  { value: 'not_documented', label: 'Ei, pole alustatud' },
-                  { value: 'unknown', label: 'Ei tea' },
-                ].map((option) => (
-                  <button
-                    key={option.value}
-                    type="button"
-                    onClick={() => {
-                      setFormData({ ...formData, securityProcedures: option.value });
-                      setTimeout(() => {
-                        if (currentStep < totalSteps) setCurrentStep(currentStep + 1);
-                      }, 300);
-                    }}
-                    className={`w-full flex items-center p-4 border-2 rounded-lg cursor-pointer transition text-left ${
-                      formData.securityProcedures === option.value
-                        ? 'border-primary-600 bg-primary-50'
-                        : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'
-                    }`}
-                  >
-                    <span className="font-medium text-gray-900">{option.label}</span>
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* Step 7: Security Officer */}
-          {currentStep === 7 && (
-            <div>
-              <div className="mb-4">
-                <span className="inline-block px-3 py-1 bg-orange-100 text-orange-700 rounded-full text-sm font-semibold">
-                  Infoturve praegune seis
-                </span>
-              </div>
-              <h2 className="text-2xl font-bold mb-2">
-                Kas teil on määratud infoturbe vastutaja?
-              </h2>
-              <p className="text-gray-600 mb-6">
-                NIS2 nõuab, et organisatsioonil oleks selgelt määratud infoturbe eest vastutav isik.
-              </p>
-
-              <div className="space-y-3">
-                {[
-                  { value: 'yes_dedicated', label: 'Jah, eraldi infoturbe spetsialist' },
-                  { value: 'yes_part_time', label: 'Jah, keegi tegeleb sellega osaliselt' },
-                  { value: 'no', label: 'Ei, pole määratud' },
-                  { value: 'unknown', label: 'Ei tea' },
-                ].map((option) => (
-                  <button
-                    key={option.value}
-                    type="button"
-                    onClick={() => {
-                      setFormData({ ...formData, hasSecurityOfficer: option.value });
-                      setTimeout(() => {
-                        if (currentStep < totalSteps) setCurrentStep(currentStep + 1);
-                      }, 300);
-                    }}
-                    className={`w-full flex items-center p-4 border-2 rounded-lg cursor-pointer transition text-left ${
-                      formData.hasSecurityOfficer === option.value
-                        ? 'border-primary-600 bg-primary-50'
-                        : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'
-                    }`}
-                  >
-                    <span className="font-medium text-gray-900">{option.label}</span>
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* Step 8: Personal Data */}
-          {currentStep === 8 && (
-            <div>
-              <div className="mb-4">
-                <span className="inline-block px-3 py-1 bg-purple-100 text-purple-700 rounded-full text-sm font-semibold">
-                  Andmekaitse
-                </span>
-              </div>
-              <h2 className="text-2xl font-bold mb-2">
-                Kas te töötlete isikuandmeid?
-              </h2>
-              <p className="text-gray-600 mb-6">
-                Isikuandmete töötlemine toob kaasa täiendavaid GDPR ja NIS2 nõudeid.
-              </p>
-
-              <div className="space-y-3">
-                {[
-                  { value: 'yes_extensive', label: 'Jah, mahukalt (nt terviseandmed, finantsandmed)' },
-                  { value: 'yes_limited', label: 'Jah, vähesel määral (nt kontaktandmed)' },
-                  { value: 'no', label: 'Ei' },
-                  { value: 'unknown', label: 'Ei tea' },
-                ].map((option) => (
-                  <button
-                    key={option.value}
-                    type="button"
-                    onClick={() => {
-                      const updatedData = { ...formData, processesPersonalData: option.value };
-                      setFormData(updatedData);
-                      // Last step - submit after short delay with the updated data
-                      setTimeout(() => {
-                        handleSubmit(updatedData);
-                      }, 300);
-                    }}
-                    className={`w-full flex items-center p-4 border-2 rounded-lg cursor-pointer transition text-left ${
-                      formData.processesPersonalData === option.value
-                        ? 'border-primary-600 bg-primary-50'
-                        : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'
-                    }`}
-                  >
-                    <span className="font-medium text-gray-900">{option.label}</span>
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* Navigation - only show for IT Systems step (checkboxes) and text input */}
-          {(currentStep === 2 && ['other'].includes(formData.sector)) || currentStep === 5 ? (
-            <div className="flex justify-between mt-8 pt-6 border-t">
-              <button
-                onClick={handleBack}
-                disabled={currentStep === 1}
-                className="px-6 py-2 text-gray-700 font-semibold hover:bg-gray-100 rounded-lg transition disabled:opacity-50"
-              >
-                Tagasi
-              </button>
-
-              <button
-                onClick={handleNext}
-                disabled={!isStepValid() || loading}
-                className="px-6 py-2 bg-primary-600 text-white font-semibold rounded-lg hover:bg-primary-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {loading ? 'Salvestan...' : 'Edasi'}
-              </button>
-            </div>
-          ) : (
-            <div className="mt-8 pt-6 border-t text-center">
-              <p className="text-sm text-gray-500">Valige vastus jätkamiseks</p>
-            </div>
-          )}
-        </div>
+            </form>
+          </FormProvider>
         </div>
       </div>
     </div>

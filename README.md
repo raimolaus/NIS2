@@ -121,30 +121,34 @@ npm run db:generate  # Genereeri Prisma Client
 
 ## 🎯 MVP Scope (Sprint 1-8, ~16 nädalat)
 
-### Sprint 1: Foundation (2 nädalat) ✅
+### Sprint 1: Foundation (2 nädalat) ✅ VALMIS
 - [x] Repository setup
 - [x] Database schema
 - [x] Turuuuringu küsimustikud
-- [ ] Landing page (basic)
-- [ ] Signup/Login flow
-- [ ] Dashboard (empty)
+- [x] Landing page (basic)
+- [x] Signup/Login flow
+- [x] Dashboard (empty)
 
-### Sprint 2: Onboarding (2 nädalat)
-- [ ] Organisatsiooni profiil
-- [ ] NIS2 kohaldatavuse loogika
-- [ ] AI vestlus (hello world)
+### Sprint 2: Onboarding (2 nädalat) ✅ VALMIS
+- [x] Organisatsiooni profiil
+- [x] NIS2 kohaldatavuse loogika
+- [x] 8-sammuline küsimustik
 
-### Sprint 3: AI Vestlus (2 nädalat)
+### Sprint 3: AI Vestlus (2 nädalat) ⏭️ VAHELE JÄETUD
 - [ ] Chat UI
 - [ ] Claude API integration
 - [ ] Streaming responses
 - [ ] Vestluste ajalugu
 
-### Sprint 4: Enesehindamine (3 nädalat)
-- [ ] 40-küsimuseline küsimustik
-- [ ] AI juhendamine
-- [ ] Tulemuste arvutamine
-- [ ] Skoori visualiseerimine
+### Sprint 4: UI/UX Refactoring (2 päeva) ✅ VALMIS (7-8. aprill 2026)
+- [x] shadcn/ui component system (11 komponenti)
+- [x] Dashboard page refaktoreering
+- [x] Onboarding lihtsustamine (8 → 3 sammu)
+- [x] Assessment UI (40 küsimust, 6 sektsiooni)
+- [x] Documents page (6 malli)
+- [x] Risks page (maandamismeetmed)
+- [x] Mock andmed testimiseks
+- [x] ~3000+ rida koodi
 
 ### Sprint 5: Dokumendid (2 nädalat)
 - [ ] Template'id
@@ -237,6 +241,20 @@ Privaatne projekt - kõik õigused kaitstud.
 
 ---
 
-**Versioon:** 0.1.0 (MVP)
-**Viimati uuendatud:** 8. jaanuar 2026
-**Staatus:** 🚧 Arenduses (Sprint 1)
+**Versioon:** 0.4.0 (Sprint 4 valmis)
+**Viimati uuendatud:** 8. aprill 2026
+**Staatus:** 🟡 UI/UX valmis, Backend pooleli
+
+---
+
+## 📢 UUENDUSED (8. aprill 2026)
+
+### ✅ Sprint 4 Valmis
+- **shadcn/ui Design System** - 11 komponenti, ühtne stiil
+- **Dashboard Refaktoreerimine** - Kõik 5 lehte professionaalse väljanägemisega
+- **Onboarding Lihtsustamine** - 8 sammu → 3 sammu
+- **Assessment UI** - 40 küsimust, 6 sektsiooni
+- **Documents Page** - 6 dokumendimalli
+- **Risks Page** - Täielik refaktoreerimine + maandamismeetmed
+
+**Vaata detailset logi:** [CHANGELOG.md](docs/CHANGELOG.md) ja [DEVELOPMENT_LOG.md](docs/DEVELOPMENT_LOG.md)

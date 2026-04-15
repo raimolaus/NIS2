@@ -8,7 +8,7 @@
 
 ---
 
-## 📍 PRAEGUNE STAATUS (8. jaanuar 2026)
+## 📍 PRAEGUNE STAATUS (8. aprill 2026)
 
 **Sprint 1: Foundation** ✅ VALMIS
 - Next.js 15 + TypeScript projekt seadistatud
@@ -25,11 +25,31 @@
 - Profiilileht (vaatamine + muutmine)
 - Dashboard näitab organisatsiooni infot
 
+**Sprint 4: UI Component System + Dashboard Refactoring** ✅ VALMIS (7-8. aprill 2026)
+- ✅ shadcn/ui komponentide süsteem (11 komponenti)
+- ✅ Dashboard page refaktoreering (Card-based layout)
+- ✅ Onboarding flow lihtsustamine (8 → 3 sammu)
+- ✅ Assessment UI (40 küsimust, 6 sektsiooni)
+- ✅ Documents page (6 dokumendimalli, mock genereerimine)
+- ✅ Risks page (täielik refaktoreerimine, maandamismeetmed)
+- ✅ Ühtne design system kõigil lehtedel
+- ✅ Mock andmed testimiseks
+- 📊 ~3000+ rida koodi, 5 lehte refaktoritud
+
+**Hetkeseisund:**
+- 🟢 UI/UX: Professionaalne, ühtne design
+- 🟡 Backend: Mock andmed, API endpoint'id puuduvad
+- 🟡 Database: Prisma schema olemas, ühendused puuduvad
+- 🔴 AI: Claude API integratsioon puudub
+- 🔴 Autentimine: Ajutiselt väljas
+
 **Järgmisena:**
-- Sprint 3: AI Vestlus (Claude API integratsioon)
-- Parandused:
-  - 8. sammu salvestamise viga
-  - Radio buttons → tavalised nupud (UX parandus)
+- Sprint 5: Backend API Integration
+  - API endpoint'id (risks, documents, assessment)
+  - Database ühenduste taastamine
+  - Autentimise taastamine
+- Sprint 6: AI Vestlus (Claude API integratsioon)
+- Sprint 7: PDF/DOCX eksport
 
 ---
 
